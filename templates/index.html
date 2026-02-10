@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SQL Learning Platform</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1 class="h1">SQL Learning Platform</h1>
+        <p class="sub">Vyber si úlohu, napíš SQL, spusti a porovnaj s referenčným riešením.</p>
+      </div>
+      <div class="notice">
+        <b>{{ exercises|length }}</b> úloh zobrazených
+      </div>
+    </div>
+
+    <div class="card">
+      <form method="get" action="/" class="toolbar">
+        <div class="filters">
+          <input class="input" type="text" name="q" placeholder="Search… (napr. join, trigger, temp)" value="{{ selected.q if selected and selected.q else '' }}">
+          <select name="difficulty">
+            <option value="">Difficulty (all)</option>
+            {% for d in difficulties %}
+              <option value="{{d}}" {% if selected.difficulty == d %}selected{% endif %}>{{d}}</option>
+            {% endfor %}
+          </select>
+
+          <select name="ex_type">
+            <option value="">Type (all)</option>
+            {% for t in types %}
+              <option value="{{t}}" {% if selected.ex_type == t %}selected{% endif %}>{{t}}</option>
+            {% endfor %}
+          </select>
+
+          {% if topics and topics|length > 0 %}
+            <select name="topic">
+              <option value="">Topic (all)</option>
+              {% for tp in topics %}
+                <option value="{{tp}}" {% if selected.topic == tp %}selected{% endif %}>{{tp}}</option>
+              {% endfor %}
+            </select>
+          {% endif %}
+        </div>
+
+        <div class="filters">
+          <button type="submit">Filter</button>
+          <a href="/"><button type="button" class="secondary">Reset</button></a>
+        </div>
+      </form>
+
+      <div class="grid">
+        {% for ex in exercises %}
+          <a class="item" href="/exercise/{{ex.id}}">
+            <p class="title">{{ex.title}}</p>
+            <p class="desc">{{ex.description}}</p>
+            <div class="meta">
+              <span class="badge {{ex.difficulty}}">{{ex.difficulty}}</span>
+              <span class="badge">{{ex.exercise_type}}</span>
+              {% if ex.allowed_ops %}<span class="badge">{{ex.allowed_ops}}</span>{% endif %}
+              {% if ex.topic %}<span class="badge">{{ex.topic}}</span>{% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>

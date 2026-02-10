@@ -1,0 +1,39 @@
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: sql-learning-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sql_training
+      MYSQL_USER: student
+      MYSQL_PASSWORD: student
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./database:/docker-entrypoint-initdb.d
+
+  adminer:
+    image: adminer
+    container_name: sql-learning-adminer
+    restart: always
+    ports:
+      - "8080:8080"
+
+  backend:
+    build: .
+    container_name: sql-learning-backend
+    restart: always
+    depends_on:
+      - mariadb
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_USER: appuser
+      DB_PASSWORD: apppass
+      TEMPLATE_DB: sql_training
+    volumes:
+      - ./static:/app/static
+

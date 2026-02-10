@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Exercise</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="container">
+    <p><a href="/">← Back</a></p>
+
+    <div class="card">
+      {% if exercise %}
+        <div class="meta" style="justify-content:space-between;">
+          <div>
+            <h2 style="margin:0 0 6px;">{{ exercise.title }}</h2>
+            <div class="meta">
+              <span class="badge {{ exercise.difficulty }}">{{ exercise.difficulty }}</span>
+              <span class="badge">{{ exercise.exercise_type }}</span>
+              <span class="badge">{{ exercise.allowed_ops }}</span>
+              {% if exercise.topic %}<span class="badge">{{ exercise.topic }}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+        <p class="sub" style="margin-top:10px">{{ exercise.description }}</p>
+      {% else %}
+        <p class="notice error">Exercise not found.</p>
+      {% endif %}
+    </div>
+
+    <div class="split" style="margin-top:12px;">
+      <div class="card">
+        <!-- RUN FORM -->
+        <form method="post" action="/run">
+          <input type="hidden" name="exercise_id" value="{{ exercise.id }}">
+          <label><b>Your SQL</b></label>
+          <textarea name="query" placeholder="Write SQL here..."></textarea>
+
+          <div class="toolbar">
+            <div class="filters">
+              <button type="submit">RUN</button>
+
+              <a class="btn secondary" href="/solution/{{ exercise.id }}">
+                Show correct result
+              </a>
+
+              <a class="btn secondary" href="/code/{{ exercise.id }}">
+                Show correct code
+              </a>
+            </div>
+
+            <div class="filters">
+              <button type="button" class="secondary"
+                onclick="document.getElementById('resetForm').submit();">
+                Reset sandbox
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <!-- RESET FORM -->
+        <form id="resetForm" method="post" action="/reset" style="display:none;">
+          <input type="hidden" name="exercise_id" value="{{ exercise.id }}">
+        </form>
+
+        {% if shown_code %}
+          <h3 style="margin-top:18px;">Correct code</h3>
+          <pre>{{ shown_code }}</pre>
+        {% endif %}
+
+        {% if error %}
+          <h3 style="margin-top:18px; color:rgba(251,113,133,.95)">Error</h3>
+          <pre>{{ error }}</pre>
+        {% endif %}
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Result</h3>
+
+        {% if result_rows is not none %}
+          {% if result_rows|length == 0 %}
+            <p class="notice">(No rows)</p>
+          {% else %}
+            <table>
+              <tr>
+                {% for key in result_rows[0].keys() %}
+                  <th>{{ key }}</th>
+                {% endfor %}
+              </tr>
+
+              {% for row in result_rows %}
+                <tr>
+                  {% for value in row.values() %}
+                    <td>{{ value }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </table>
+          {% endif %}
+        {% else %}
+          <p class="notice">
+            Spusť query a výsledok sa zobrazí tu. Pri procedúrach môže byť výsledok prázdny –
+            potom skús SELECT alebo “Show correct result”.
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</body>
+</html>
