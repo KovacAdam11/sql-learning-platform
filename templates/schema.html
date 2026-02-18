@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <title>Schema</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1 class="h1">Databázová schéma</h1>
+      <p class="sub">Tabuľky, stĺpce a prepojenia (FK)</p>
+    </div>
+    <div>
+      <a href="/" class="badge">← Späť na úlohy</a>
+    </div>
+  </div>
+
+  {% for t in tables %}
+  <div class="card" style="margin-bottom:16px">
+
+    <h3 class="title">{{ t }}</h3>
+
+    <div class="notice" style="margin-bottom:10px">
+      Stĺpce tabuľky
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Column</th>
+          <th>Type</th>
+          <th>NULL</th>
+          <th>Key</th>
+          <th>Extra</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in columns_by_table.get(t, []) %}
+        <tr>
+          <td><code>{{ c.column_name }}</code></td>
+          <td>{{ c.column_type }}</td>
+          <td>{{ c.is_nullable }}</td>
+          <td>{{ c.column_key }}</td>
+          <td>{{ c.extra }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="margin-top:16px"></div>
+
+    <div class="notice" style="margin-bottom:10px">
+      Foreign Keys (prepojenia)
+    </div>
+
+    {% set rels = fks_by_table.get(t, []) %}
+    {% if rels and rels|length > 0 %}
+      <table>
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>→</th>
+            <th>To</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fk in rels %}
+          <tr>
+            <td><code>{{ fk.table_name }}.{{ fk.column_name }}</code></td>
+            <td>→</td>
+            <td><code>{{ fk.referenced_table_name }}.{{ fk.referenced_column_name }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="notice">
+        Žiadne prepojenia
+      </div>
+    {% endif %}
+
+  </div>
+  {% endfor %}
+
+</div>
+
+</body>
+</html>

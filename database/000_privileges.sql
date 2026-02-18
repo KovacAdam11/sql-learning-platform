@@ -9,7 +9,13 @@ ON sql_training.* TO 'appuser'@'%';
 GRANT CREATE, DROP ON *.* TO 'appuser'@'%';
 
 -- práva na všetky sandbox databázy
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, TRIGGER, CREATE VIEW, SHOW VIEW, EXECUTE
-ON `sql_sandbox\_%`.* TO 'appuser'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP,
+      CREATE TEMPORARY TABLES,
+      CREATE VIEW,
+      CREATE ROUTINE,
+      ALTER ROUTINE,
+      TRIGGER
+ON `sql_sandbox_%`.* TO 'appuser'@'%';
 
 FLUSH PRIVILEGES;
+

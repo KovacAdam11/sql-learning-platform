@@ -234,3 +234,383 @@ INSERT INTO exercise_solutions (exercise_id, reference_sql, notes) VALUES
       GROUP BY s.id, s.name, c.id, c.name
       HAVING AVG(att.attended = 1) < 0.5
       ORDER BY attendance_pct ASC;',NULL);
+
+-- -----------------------
+-- EXTRA EXERCISES 31+
+-- temp tables, triggers, procedures
+-- -----------------------
+
+-- 31-36 TEMP TABLE
+INSERT INTO exercises (title, description, difficulty, allowed_ops, exercise_type) VALUES
+('Temp: Top študenti podľa priemeru známok', 
+ 'Vytvor TEMPORARY TABLE tmp_student_avg (student_id, student_name, avg_grade). Naplň ju priemerom známok každého študenta (len tí čo majú známky). Potom vypíš TOP 5 podľa avg_grade (ASC).', 
+ 'medium', 'ddl', 'temp_table'),
+
+('Temp: Kurzy s počtom študentov', 
+ 'Vytvor TEMPORARY TABLE tmp_course_counts (course_id, course_name, student_count). Naplň ju počtom zapísaných študentov v kurze (aj 0). Potom vypíš iba kurzy so student_count = 0.', 
+ 'medium', 'ddl', 'temp_table'),
+
+('Temp: Odovzdania v posledných 14 dňoch', 
+ 'Vytvor TEMPORARY TABLE tmp_recent_submissions (assignment_id, student_id, submitted_at, score) so submissions za posledných 14 dní. Potom vypíš počet odovzdaní podľa assignment_id.', 
+ 'medium', 'ddl', 'temp_table'),
+
+('Temp: Rebríček kurzov podľa submissions priemeru', 
+ 'Vytvor TEMPORARY TABLE tmp_course_avg_score (course_id, course_name, avg_score). Naplň ju priemerom score zo submissions (ignoruj NULL). Potom vypíš kurzy zoradené od najlepšieho priemeru (DESC).', 
+ 'hard', 'ddl', 'temp_table'),
+
+('Temp: Dochádzka percentá', 
+ 'Vytvor TEMPORARY TABLE tmp_attendance_pct (student_id, course_id, attendance_pct). Naplň percentom dochádzky attended=1 pre každého študenta v každom kurze. Potom vypíš tie riadky kde attendance_pct < 50%.', 
+ 'hard', 'ddl', 'temp_table'),
+
+('Temp: Detekcia duplicít emailov', 
+ 'Vytvor TEMPORARY TABLE tmp_dup_emails (email, cnt). Naplň ju emailami zo students, ktoré sa opakujú (cnt > 1). Vypíš výsledok.', 
+ 'medium', 'ddl', 'temp_table');
+
+
+-- 37-41 PROCEDURES
+INSERT INTO exercises (title, description, difficulty, allowed_ops, exercise_type) VALUES
+('Procedure: Priemer známok študenta', 
+ 'Vytvor procedúru sp_student_avg_grade(IN p_student_id INT), ktorá vráti (SELECT) student_id, student_name, avg_grade. Avg počítaj z grades cez enrollments. Ak nemá známky, vráť avg_grade = NULL.', 
+ 'medium', 'procedures', 'procedure'),
+
+('Procedure: Zápis študenta do kurzu', 
+ 'Vytvor procedúru sp_enroll_student(IN p_student_id INT, IN p_course_id INT), ktorá vloží záznam do enrollments iba ak ešte neexistuje. Ak už existuje, neurobí nič.', 
+ 'hard', 'procedures', 'procedure'),
+
+('Procedure: Najlepší študent v kurze podľa submissions', 
+ 'Vytvor procedúru sp_best_student_in_course(IN p_course_id INT), ktorá vráti študenta s najvyšším priemerom score zo submissions v danom kurze (ignoruj NULL).', 
+ 'hard', 'procedures', 'procedure'),
+
+('Procedure: Report attendance pre kurz', 
+ 'Vytvor procedúru sp_course_attendance_report(IN p_course_id INT), ktorá vráti pre každého študenta: attended_yes, attended_no, attendance_pct.', 
+ 'hard', 'procedures', 'procedure'),
+
+('Procedure: Vytvor assignment pre kurz', 
+ 'Vytvor procedúru sp_create_assignment(IN p_course_id INT, IN p_title VARCHAR(200), IN p_due DATE), ktorá vloží nový assignment (course_id, title, due_date). Potom SELECTne novovytvorený riadok.', 
+ 'medium', 'procedures', 'procedure');
+
+
+-- 42-46 TRIGGERS
+INSERT INTO exercises (title, description, difficulty, allowed_ops, exercise_type) VALUES
+('Trigger: Normalizuj email na lowercase', 
+ 'Vytvor BEFORE INSERT trigger na students, ktorý nastaví NEW.email = LOWER(NEW.email) (ak email nie je NULL).', 
+ 'medium', 'ddl', 'trigger'),
+
+('Trigger: Zakáž score mimo 0-100', 
+ 'Vytvor BEFORE INSERT/UPDATE trigger na submissions, ktorý nedovolí uložiť score < 0 alebo > 100 (ak score nie je NULL). Pri porušení vyhoď SIGNAL.', 
+ 'hard', 'ddl', 'trigger'),
+
+('Trigger: Nedovoľ známku mimo 1-5', 
+ 'Vytvor BEFORE INSERT trigger na grades, ktorý nedovolí vložiť grade mimo 1-5. Pri porušení vyhoď SIGNAL.', 
+ 'medium', 'ddl', 'trigger'),
+
+('Trigger: Automatické submitted_at', 
+ 'Vytvor BEFORE INSERT trigger na submissions, ktorý ak NEW.submitted_at je NULL, nastaví ho na CURRENT_TIMESTAMP.', 
+ 'easy', 'ddl', 'trigger'),
+
+('Trigger: Zákaz mazania študentov s enrollments', 
+ 'Vytvor BEFORE DELETE trigger na students: ak má študent aspoň jeden enrollment, mazanie zakáž (SIGNAL).', 
+ 'hard', 'ddl', 'trigger');
+
+
+-- -----------------------
+-- Reference solutions (31..46)
+-- -----------------------
+INSERT INTO exercise_solutions (exercise_id, reference_sql, reference_result_sql, notes) VALUES
+(31, 'DROP TEMPORARY TABLE IF EXISTS tmp_student_avg;
+
+CREATE TEMPORARY TABLE tmp_student_avg AS
+SELECT s.id AS student_id,
+       s.name AS student_name,
+       ROUND(AVG(g.grade), 2) AS avg_grade
+FROM students s
+JOIN enrollments e ON e.student_id = s.id
+JOIN grades g ON g.enrollment_id = e.id
+GROUP BY s.id, s.name;
+
+SELECT *
+FROM tmp_student_avg
+ORDER BY avg_grade ASC, student_name ASC
+LIMIT 5;', NULL, 'TEMPORARY TABLE + AVG známok'),
+
+(32, 'DROP TEMPORARY TABLE IF EXISTS tmp_course_counts;
+
+CREATE TEMPORARY TABLE tmp_course_counts AS
+SELECT c.id AS course_id,
+       c.name AS course_name,
+       COUNT(e.id) AS student_count
+FROM courses c
+LEFT JOIN enrollments e ON e.course_id = c.id
+GROUP BY c.id, c.name;
+
+SELECT *
+FROM tmp_course_counts
+WHERE student_count = 0
+ORDER BY course_name;', NULL, 'Kurzy s 0 študentmi cez temp table'),
+
+(33, 'DROP TEMPORARY TABLE IF EXISTS tmp_recent_submissions;
+
+CREATE TEMPORARY TABLE tmp_recent_submissions AS
+SELECT assignment_id,
+       student_id,
+       submitted_at,
+       score
+FROM submissions
+WHERE submitted_at >= (CURRENT_TIMESTAMP - INTERVAL 14 DAY);
+
+SELECT assignment_id,
+       COUNT(*) AS cnt
+FROM tmp_recent_submissions
+GROUP BY assignment_id
+ORDER BY cnt DESC, assignment_id;', NULL, 'Filtrovanie podľa dátumu + agregácia'),
+
+(34, 'DROP TEMPORARY TABLE IF EXISTS tmp_course_avg_score;
+
+CREATE TEMPORARY TABLE tmp_course_avg_score AS
+SELECT c.id AS course_id,
+       c.name AS course_name,
+       ROUND(AVG(su.score), 2) AS avg_score
+FROM courses c
+JOIN assignments a ON a.course_id = c.id
+JOIN submissions su ON su.assignment_id = a.id
+WHERE su.score IS NOT NULL
+GROUP BY c.id, c.name;
+
+SELECT *
+FROM tmp_course_avg_score
+ORDER BY avg_score DESC, course_name;', NULL, 'Priemer score per kurz'),
+
+(35, 'DROP TEMPORARY TABLE IF EXISTS tmp_attendance_pct;
+
+CREATE TEMPORARY TABLE tmp_attendance_pct AS
+SELECT att.student_id,
+       att.course_id,
+       ROUND(100 * AVG(att.attended = 1), 2) AS attendance_pct
+FROM attendance att
+GROUP BY att.student_id, att.course_id;
+
+SELECT t.student_id,
+       s.name AS student_name,
+       t.course_id,
+       c.name AS course_name,
+       t.attendance_pct
+FROM tmp_attendance_pct t
+JOIN students s ON s.id = t.student_id
+JOIN courses  c ON c.id = t.course_id
+WHERE t.attendance_pct < 50
+ORDER BY t.attendance_pct ASC, s.name;', NULL, 'AVG(boolean) trik'),
+
+(36, 'DROP TEMPORARY TABLE IF EXISTS tmp_dup_emails;
+
+CREATE TEMPORARY TABLE tmp_dup_emails AS
+SELECT email,
+       COUNT(*) AS cnt
+FROM students
+WHERE email IS NOT NULL
+GROUP BY email
+HAVING COUNT(*) > 1;
+
+SELECT *
+FROM tmp_dup_emails
+ORDER BY cnt DESC, email;', NULL, 'Duplikáty cez GROUP BY + HAVING');
+
+INSERT INTO exercise_solutions (exercise_id, reference_sql, reference_result_sql, notes) VALUES
+(37,
+'DROP PROCEDURE IF EXISTS sp_student_avg_grade;
+DELIMITER $$
+
+CREATE PROCEDURE sp_student_avg_grade(IN p_student_id INT)
+BEGIN
+  SELECT s.id AS student_id, s.name AS student_name,
+         ROUND(AVG(g.grade), 2) AS avg_grade
+  FROM students s
+  LEFT JOIN enrollments e ON e.student_id = s.id
+  LEFT JOIN grades g ON g.enrollment_id = e.id
+  WHERE s.id = p_student_id
+  GROUP BY s.id, s.name;
+END$$
+
+DELIMITER ;',
+'CALL sp_student_avg_grade(1);',
+'LEFT JOIN aby vrátil aj NULL priemer'),
+
+(38,
+'DROP PROCEDURE IF EXISTS sp_enroll_student;
+DELIMITER $$
+
+CREATE PROCEDURE sp_enroll_student(IN p_student_id INT, IN p_course_id INT)
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM enrollments
+    WHERE student_id = p_student_id AND course_id = p_course_id
+  ) THEN
+    INSERT INTO enrollments (student_id, course_id)
+    VALUES (p_student_id, p_course_id);
+  END IF;
+
+  SELECT * FROM enrollments
+  WHERE student_id = p_student_id AND course_id = p_course_id;
+END$$
+
+DELIMITER ;',
+'CALL sp_enroll_student(1, 1);',
+'IF NOT EXISTS + INSERT'),
+
+(39,
+'DROP PROCEDURE IF EXISTS sp_best_student_in_course;
+DELIMITER $$
+
+CREATE PROCEDURE sp_best_student_in_course(IN p_course_id INT)
+BEGIN
+  SELECT s.id, s.name, ROUND(AVG(su.score), 2) AS avg_score
+  FROM enrollments e
+  JOIN students s ON s.id = e.student_id
+  JOIN assignments a ON a.course_id = e.course_id
+  JOIN submissions su ON su.assignment_id = a.id AND su.student_id = s.id
+  WHERE e.course_id = p_course_id
+    AND su.score IS NOT NULL
+  GROUP BY s.id, s.name
+  ORDER BY avg_score DESC
+  LIMIT 1;
+END$$
+
+DELIMITER ;',
+'CALL sp_best_student_in_course(1);',
+'Najlepší podľa priemeru score v kurze'),
+
+(40,
+'DROP PROCEDURE IF EXISTS sp_course_attendance_report;
+DELIMITER $$
+
+CREATE PROCEDURE sp_course_attendance_report(IN p_course_id INT)
+BEGIN
+  SELECT s.id AS student_id, s.name AS student_name,
+         SUM(CASE WHEN att.attended = 1 THEN 1 ELSE 0 END) AS attended_yes,
+         SUM(CASE WHEN att.attended = 0 THEN 1 ELSE 0 END) AS attended_no,
+         ROUND(100 * AVG(att.attended = 1), 2) AS attendance_pct
+  FROM students s
+  JOIN attendance att ON att.student_id = s.id
+  WHERE att.course_id = p_course_id
+  GROUP BY s.id, s.name
+  ORDER BY attendance_pct DESC, s.name;
+END$$
+
+DELIMITER ;',
+'CALL sp_course_attendance_report(1);',
+'Report dochádzky pre kurz'),
+
+(41,
+'DROP PROCEDURE IF EXISTS sp_create_assignment;
+DELIMITER $$
+
+CREATE PROCEDURE sp_create_assignment(
+  IN p_course_id INT,
+  IN p_title VARCHAR(200),
+  IN p_due DATE
+)
+BEGIN
+  INSERT INTO assignments (course_id, title, due_date)
+  VALUES (p_course_id, p_title, p_due);
+
+  SELECT * FROM assignments WHERE id = LAST_INSERT_ID();
+END$$
+
+DELIMITER ;',
+'CALL sp_create_assignment(1, ''New assignment'', CURRENT_DATE + INTERVAL 7 DAY);',
+'Insert + LAST_INSERT_ID()');
+
+INSERT INTO exercise_solutions (exercise_id, reference_sql, reference_result_sql, notes) VALUES
+(42,
+'DROP TRIGGER IF EXISTS trg_students_email_lower_ins;
+DELIMITER $$
+
+CREATE TRIGGER trg_students_email_lower_ins
+BEFORE INSERT ON students
+FOR EACH ROW
+BEGIN
+  IF NEW.email IS NOT NULL THEN
+    SET NEW.email = LOWER(NEW.email);
+  END IF;
+END$$
+
+DELIMITER ;',
+'-- Otestuj: INSERT INTO students(name,email) VALUES (''Test'', ''TeSt@Example.COM'');',
+'Lowercase email pri INSERT'),
+
+(43,
+'DROP TRIGGER IF EXISTS trg_submissions_score_range_ins;
+DROP TRIGGER IF EXISTS trg_submissions_score_range_upd;
+DELIMITER $$
+
+CREATE TRIGGER trg_submissions_score_range_ins
+BEFORE INSERT ON submissions
+FOR EACH ROW
+BEGIN
+  IF NEW.score IS NOT NULL AND (NEW.score < 0 OR NEW.score > 100) THEN
+    SIGNAL SQLSTATE ''45000'' SET MESSAGE_TEXT = ''Score must be between 0 and 100'';
+  END IF;
+END$$
+
+CREATE TRIGGER trg_submissions_score_range_upd
+BEFORE UPDATE ON submissions
+FOR EACH ROW
+BEGIN
+  IF NEW.score IS NOT NULL AND (NEW.score < 0 OR NEW.score > 100) THEN
+    SIGNAL SQLSTATE ''45000'' SET MESSAGE_TEXT = ''Score must be between 0 and 100'';
+  END IF;
+END$$
+
+DELIMITER ;',
+'-- Otestuj: UPDATE submissions SET score=999 WHERE id=1;',
+'Dva triggery (INSERT aj UPDATE)'),
+
+(44,
+'DROP TRIGGER IF EXISTS trg_grades_grade_range_ins;
+DELIMITER $$
+
+CREATE TRIGGER trg_grades_grade_range_ins
+BEFORE INSERT ON grades
+FOR EACH ROW
+BEGIN
+  IF NEW.grade < 1 OR NEW.grade > 5 THEN
+    SIGNAL SQLSTATE ''45000'' SET MESSAGE_TEXT = ''Grade must be between 1 and 5'';
+  END IF;
+END$$
+
+DELIMITER ;',
+'-- Otestuj: INSERT INTO grades(enrollment_id, grade) VALUES (1, 7);',
+'Validácia rozsahu známok'),
+
+(45,
+'DROP TRIGGER IF EXISTS trg_submissions_set_submitted_at;
+DELIMITER $$
+
+CREATE TRIGGER trg_submissions_set_submitted_at
+BEFORE INSERT ON submissions
+FOR EACH ROW
+BEGIN
+  IF NEW.submitted_at IS NULL THEN
+    SET NEW.submitted_at = CURRENT_TIMESTAMP;
+  END IF;
+END$$
+
+DELIMITER ;',
+'-- Otestuj: INSERT INTO submissions(assignment_id, student_id, score) VALUES (1,1,50);',
+'Auto timestamp'),
+
+(46,
+'DROP TRIGGER IF EXISTS trg_students_block_delete_if_enrolled;
+DELIMITER $$
+
+CREATE TRIGGER trg_students_block_delete_if_enrolled
+BEFORE DELETE ON students
+FOR EACH ROW
+BEGIN
+  IF EXISTS (SELECT 1 FROM enrollments e WHERE e.student_id = OLD.id) THEN
+    SIGNAL SQLSTATE ''45000'' SET MESSAGE_TEXT = ''Cannot delete student with enrollments'';
+  END IF;
+END$$
+
+DELIMITER ;',
+'-- Otestuj: DELETE FROM students WHERE id=1;',
+'Zákaz delete pri existujúcich enrollments');

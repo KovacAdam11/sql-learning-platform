@@ -273,36 +273,52 @@ def _split_sql_with_delimiters(sql: str) -> list[str]:
     return [s for s in statements if s.strip()]
 
 
+from typing import Any
+
 def run_sql_in_sandbox(sandbox_db: str, sql: str) -> tuple[list[dict[str, Any]] | None, str | None]:
     """
-    Executes SQL that can include:
-      - SELECT
-      - DML/DDL
-      - TEMP TABLES
-      - VIEWS
-      - PROCEDURES
-      - TRIGGERS
-    Supports DELIMITER directives.
-
-    Returns rows from the LAST statement that produced rows (SELECT / CALL that returns rows).
+    Executes SQL in sandbox DB.
+    Returns rows from the LAST statement that produced rows.
+    Works with mysql.connector (multi=True) and falls back to delimiter-splitting.
     """
     conn = conn_db(sandbox_db)
     cur = conn.cursor(dictionary=True)
 
     rows = None
     try:
-        statements = _split_sql_with_delimiters(sql)
+        script = (sql or "").strip()
+        if not script:
+            conn.close()
+            return None, "Empty SQL."
+
+        # remove DELIMITER lines (they are mysql CLI-only)
+        cleaned_lines = []
+        for line in script.splitlines():
+            cleaned_lines.append(line)
+        script = "\n".join(cleaned_lines).strip()
+
+        # 1) Try mysql.connector multi execution
+        try:
+            for res in cur.execute(script, multi=True):
+                if getattr(res, "with_rows", False):
+                    rows = res.fetchall()
+            conn.close()
+            return rows, None
+        except TypeError:
+            # driver/cursor doesn't support multi=True -> fallback
+            pass
+
+        # 2) Fallback: your splitter (DELIMITER-aware)
+        statements = _split_sql_with_delimiters(script)
         if not statements:
             conn.close()
             return None, "Empty SQL."
 
         for stmt in statements:
-            if not stmt.strip():
+            stmt = (stmt or "").strip()
+            if not stmt:
                 continue
-
             cur.execute(stmt)
-
-            # capture last result set if present
             if getattr(cur, "with_rows", False):
                 rows = cur.fetchall()
 
@@ -312,6 +328,8 @@ def run_sql_in_sandbox(sandbox_db: str, sql: str) -> tuple[list[dict[str, Any]] 
     except Exception as e:
         conn.close()
         return None, str(e)
+
+
 
 # ----------------------------
 # Routes
@@ -497,12 +515,17 @@ def show_correct_result(request: Request, exercise_id: int):
     if not sol:
         rows, err = None, "No solution found for this exercise."
     else:
-        # run reference_sql first (so procedures/temp tables/views can be created)
-        rows, err = run_sql_in_sandbox(sdb, sol["reference_sql"])
+        script = sol["reference_sql"] or ""
 
-        # if a separate result sql exists, run it to show output
-        if not err and sol.get("reference_result_sql"):
-            rows, err = run_sql_in_sandbox(sdb, sol["reference_result_sql"])
+        # append result SQL so everything runs in ONE connection
+        if sol.get("reference_result_sql"):
+            script = script.rstrip()
+            if script and not script.endswith(";"):
+                script += ";"
+            script += "\n" + sol["reference_result_sql"]
+
+        rows, err = run_sql_in_sandbox(sdb, script)
+
 
     resp = templates.TemplateResponse(
         "exercise.html",
@@ -525,3 +548,64 @@ def reset_sandbox(request: Request, exercise_id: int = Form(...)):
     sdb = sandbox_db_name(sid)
     clone_template_to_sandbox(sdb)
     return RedirectResponse(url=f"/exercise/{exercise_id}", status_code=303)
+
+
+@app.get("/schema", response_class=HTMLResponse)
+def schema_page(request: Request):
+    conn = conn_db(TEMPLATE_DB)
+    cur = conn.cursor(dictionary=True)
+
+    # 1) Tables
+    cur.execute("""
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = %s
+          AND table_type = 'BASE TABLE'
+        ORDER BY table_name;
+    """, (TEMPLATE_DB,))
+    tables = [r["table_name"] for r in cur.fetchall()]
+
+    # 2) Columns (+ PK info)
+    cur.execute("""
+        SELECT c.table_name, c.column_name, c.column_type, c.is_nullable, c.column_key, c.extra
+        FROM information_schema.columns c
+        WHERE c.table_schema = %s
+        ORDER BY c.table_name, c.ordinal_position;
+    """, (TEMPLATE_DB,))
+    cols = cur.fetchall()
+
+    # 3) Foreign keys (relations)
+    cur.execute("""
+        SELECT
+          kcu.table_name,
+          kcu.column_name,
+          kcu.referenced_table_name,
+          kcu.referenced_column_name
+        FROM information_schema.key_column_usage kcu
+        WHERE kcu.table_schema = %s
+          AND kcu.referenced_table_name IS NOT NULL
+        ORDER BY kcu.table_name, kcu.column_name;
+    """, (TEMPLATE_DB,))
+    fks = cur.fetchall()
+
+    conn.close()
+
+    # group columns by table
+    columns_by_table: dict[str, list[dict]] = {t: [] for t in tables}
+    for r in cols:
+        columns_by_table.setdefault(r["table_name"], []).append(r)
+
+    # group fks by table
+    fks_by_table: dict[str, list[dict]] = {t: [] for t in tables}
+    for r in fks:
+        fks_by_table.setdefault(r["table_name"], []).append(r)
+
+    return templates.TemplateResponse(
+        "schema.html",
+        {
+            "request": request,
+            "tables": tables,
+            "columns_by_table": columns_by_table,
+            "fks_by_table": fks_by_table,
+        },
+    )
